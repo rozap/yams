@@ -8,10 +8,14 @@ defmodule TestHelpers do
     from_ts + Yams.ms_to_key(20)
   end
 
-  def make_yam_stream(ref \\ nil) do
+  def make_yam_stream(ref \\ nil, count \\ 30) do
     {:created, h} = Yams.Session.open(ref || UUID.uuid1())
-    Enum.each(30..60, fn num ->
-      t = num - 30
+
+    start_t = 30
+    end_t = start_t + count
+
+    Enum.each(start_t..end_t, fn num ->
+      t = num - start_t
       key = from_ts + Yams.ms_to_key(t)
       :ok = Yams.Session.put(h, key, %{
         "num" => num,
@@ -24,6 +28,16 @@ defmodule TestHelpers do
     range = {from_ts, to_ts}
 
     Yams.Session.stream!(h, range)
+  end
+
+
+  defmacro timer(body) do
+    quote do
+      start_time = System.os_time(:milliseconds)
+      result = unquote(body[:do])
+      end_time = System.os_time(:milliseconds)
+      {end_time - start_time, result}
+    end
   end
 
 end

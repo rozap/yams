@@ -181,7 +181,6 @@ defmodule Yams.Query do
     end
   end
 
-
   defmacro percentile(state, expr, perc, label) do
     rowified = bind_row(expr)
 
