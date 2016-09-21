@@ -1,0 +1,8 @@
+%{"cuttlefish": {:git, "git://github.com/basho/cuttlefish.git", "a463682ba86e9f49404dd72bb052e6e0c4b40839", [tag: "2.0.6"]},
+  "eleveldb": {:git, "https://github.com/basho/eleveldb.git", "3c8b26e99d883260d9ac922c0381ccaf41644025", [tag: "2.2.19"]},
+  "getopt": {:git, "git://github.com/jcomellas/getopt.git", "388dc95caa7fb97ec7db8cfc39246a36aba61bd8", [tag: "v0.8.2"]},
+  "goldrush": {:git, "git://github.com/DeadZen/goldrush.git", "64864ba7fcf40988361340e48680b49a2c2938cf", [tag: "0.1.7"]},
+  "lager": {:git, "git://github.com/basho/lager.git", "f65dde85523b6aa6a259db1c93518187ae366515", [tag: "2.2.0"]},
+  "neotoma": {:git, "git://github.com/seancribbs/neotoma.git", "6ac6007c7713712a80096de5c7cdf5b85b01374e", [tag: "1.7.3"]},
+  "statistics": {:hex, :statistics, "0.4.1", "e9bfe6649f70842d9ebce69aa31ac8b6928e096bde43b683d7d673057237d028", [:mix], []},
+  "uuid": {:hex, :uuid, "1.1.5", "96cb36d86ee82f912efea4d50464a5df606bf3f1163d6bdbb302d98474969369", [:mix], []}}
