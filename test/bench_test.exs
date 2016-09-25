@@ -6,7 +6,7 @@ defmodule BenchTest do
   import TestHelpers
 
   @from_ts 1472175016297554068
-  @count 10_000
+  @count 50_000
 
   def keyspace do
     {@from_ts, @from_ts + Yams.ms_to_key(@count)}
@@ -21,7 +21,7 @@ defmodule BenchTest do
       key = @from_ts + Yams.ms_to_key(num)
       :ok = Yams.Session.put(h, key, %{
         "num" => num,
-        "str" => "foo_#{num}"
+        "str" => "foo_#{num}",
       })
     end)
 
