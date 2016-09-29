@@ -48,7 +48,7 @@ defmodule BenchTest do
   end
 
   test "100ms bucket percentile perf", %{ref: ref} do
-    {elapsed, result} = timer do
+    {elapsed, _} = timer do
       mins = open_stream(ref)
       |> Query.bucket(100, "milliseconds")
       |> Query.percentile("row.num", 90, "a")

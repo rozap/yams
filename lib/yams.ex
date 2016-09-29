@@ -5,10 +5,7 @@ defmodule Yams do
   end
 
   def init(_) do
-    children = [
-      # worker(Registry, [])
-    ]
-
+    children = []
     supervise(children, strategy: :one_for_one)
   end
 
@@ -32,11 +29,4 @@ defmodule Yams do
   def seconds_to_key(s) do
     ms_to_key(s * 1000)
   end
-
-  # def to_key(%Ecto.DateTime{} = dt) do
-  #   dt
-  #   |> Ecto.DateTime.to_erl
-  #   |> :calendar.datetime_to_gregorian_seconds
-  #   |> seconds_to_key
-  # end
 end
