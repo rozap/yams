@@ -1,6 +1,8 @@
 # Yams
 yams is a small library for putting timeseries data in leveldb and getting it out in a streamy way.
 
+<img src="http://i.imgur.com/CvQnZ9C.png" width="200"/>
+
 ### Make a leveldb timeseries store
 ```elixir
 alias Yams.{Session, Query}
