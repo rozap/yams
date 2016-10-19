@@ -4,6 +4,9 @@ defmodule InterpreterTest do
   require Yams.Query
   alias Yams.{Query, Interpreter}
 
+  ## amethyst mountain stackable gemstone
+  # luxdivine etsy
+
   setup do
     Yams.start_link
 
@@ -33,8 +36,8 @@ defmodule InterpreterTest do
 
   test "can interpret a simple expr", %{one: one, two: two} do
     actual = eval!(one, [
-      [".", ["bucket", 10, "milliseconds"]],
-      [".", ["maximum", "row.num", "max_num"]]
+      ["bucket", 10, "milliseconds"],
+      ["maximum", "row.num", "max_num"]
     ])
 
     expected = two
@@ -48,9 +51,9 @@ defmodule InterpreterTest do
 
   test "can interpret an aggregated simple expr", %{one: one, two: two} do
     actual = eval!(one, [
-      [".", ["bucket", 10, "milliseconds"]],
-      [".", ["maximum", "row.num", "max_num"]],
-      [".", ["percentile", "row.num", 95, "p95_num"]]
+      ["bucket", 10, "milliseconds"],
+      ["maximum", "row.num", "max_num"],
+      ["percentile", "row.num", 95, "p95_num"]
     ])
 
     expected = two
@@ -66,11 +69,8 @@ defmodule InterpreterTest do
   test "can interpret a nested comparison expr", %{one: one, two: two} do
 
     actual = eval!(one, [
-      [".", ["bucket", 10, "milliseconds"]],
-      [".", [
-        "where",
-        [">", ["row.num", 30]]
-      ]]
+      ["bucket", 10, "milliseconds"],
+      ["where", [">", "row.num", 30]]
     ])
 
     expected = two
@@ -84,17 +84,15 @@ defmodule InterpreterTest do
 
   test "can interpret a compound nested comparison expr", %{one: one, two: two} do
     actual = eval!(one, [
-      [".", ["bucket", 10, "milliseconds"]],
-      [".", [
+      ["bucket", 10, "milliseconds"],
+      [
         "where",
         [
           "&&",
-          [
-            [">", ["row.num", 30]],
-            ["<", ["row.num", 40]]
-          ]
+          [">", "row.num", 30],
+          ["<", "row.num", 40]
         ]
-      ]]
+      ]
     ])
 
     expected = two
@@ -108,19 +106,17 @@ defmodule InterpreterTest do
 
   test "can interpret a count where", %{one: one, two: two} do
     actual = eval!(one, [
-      [".", ["bucket", 10, "milliseconds"]],
-      [".", [
+      ["bucket", 10, "milliseconds"],
+      [
         "count_where",
         [
           "&&",
-          [
-            [">=", ["row.num", 30]],
-            ["<=", ["row.num", 40]]
-          ]
+          [">=", "row.num", 30],
+          ["<=", "row.num", 40]
         ],
         "something"
-      ]],
-      [".", ["aggregates"]]
+      ],
+      ["aggregates"]
     ])
 
     expected = two
@@ -131,6 +127,24 @@ defmodule InterpreterTest do
     |> Enum.into([])
 
     assert actual == expected
+  end
+
+  test "can give a reasonable error for an undefined func" do
+    error = Interpreter.compile([
+      ["bucket", 10, "milliseconds"],
+      ["foobar", 20, "baz"]
+    ])
+
+    assert error == {:error, "Unknown function call (foobar 20 baz)"}
+  end
+
+  test "can give a reasonable error for an undefined prim" do
+    error = Interpreter.compile([
+      ["bucket", 10, "milliseconds"],
+      ["where", 20, %{}]
+    ])
+
+    assert error == {:error, "Wanted a primitive, got %{}"}
   end
 
 end

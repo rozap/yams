@@ -35,7 +35,7 @@ defmodule BenchTest do
 
   test "100ms bucket count perf", %{ref: ref} do
     {elapsed, _} = timer do
-      mins = open_stream(ref)
+      open_stream(ref)
       |> Query.bucket(100, "milliseconds")
       |> Query.count("row.num", "a")
       |> Query.aggregates
@@ -49,7 +49,7 @@ defmodule BenchTest do
 
   test "100ms bucket percentile perf", %{ref: ref} do
     {elapsed, _} = timer do
-      mins = open_stream(ref)
+      open_stream(ref)
       |> Query.bucket(100, "milliseconds")
       |> Query.percentile("row.num", 90, "a")
       |> Query.aggregates
@@ -63,7 +63,7 @@ defmodule BenchTest do
 
   test "100ms bucket count_where perf", %{ref: ref} do
     {elapsed, _} = timer do
-      mins = open_stream(ref)
+      open_stream(ref)
       |> Query.bucket(100, "milliseconds")
       |> Query.count_where("row.num" > 2 && "row.num" < 80, "a")
       |> Query.aggregates

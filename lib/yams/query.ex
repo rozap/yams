@@ -13,9 +13,6 @@ defmodule Yams.Query do
     defstruct start_t: nil, end_t: nil, aggregations: %{}
   end
 
-  ##
-  # Convert tests to use /2 args here instead of tuple for {unit, quant}
-  # will make interpreter easier
   def bucket(state, seconds, "seconds") do
     bucket(state, Yams.seconds_to_key(seconds), "nanoseconds")
   end
@@ -46,7 +43,6 @@ defmodule Yams.Query do
       others -> Statistics.percentile(others, p)
     end
   end
-
 
   defp bind_row([{e, m, args} | rest]) do
     [{e, m, bind_row(args)} | bind_row(rest)]
@@ -204,7 +200,6 @@ defmodule Yams.Query do
       )
     end
   end
-
 
   defmacro where(state, expr) do
     rowified = bind_row(expr)

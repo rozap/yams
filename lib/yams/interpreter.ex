@@ -1,52 +1,120 @@
 defmodule Yams.Interpreter do
   require Logger
-  @query [:Yams, :Query]
 
-  defp el_expr([".", [func_name | args]]) do
-    {
-      {:., [], [
-        {:__aliases__, [], @query},
-        String.to_atom(func_name)
-      ]},
-      [],
-      Enum.map(args, &el_expr/1)
-    }
+  def error_or_subexprs(sexprs) do
+    ast = Enum.map(sexprs, &to_expr/1)
+
+    error = Enum.find(ast, fn
+      {:error, _} -> true
+      _ -> false
+    end)
+
+    if error do
+      error
+    else
+      {:ok, ast}
+    end
   end
 
-  ##
-  # TODO: make `c` here match only against whitelisted comparators
-  defp el_expr([c, args]) when is_list(args) do
-    {String.to_atom(c), [], Enum.map(args, &el_expr/1)}
+  @queryers [
+    "bucket",
+    "minimum",
+    "maximum",
+    "count_where",
+    "percentile",
+    "where",
+    "aggregates"
+  ]
+
+  Enum.each(@queryers, fn func_name ->
+    defp to_expr([unquote(func_name) | args]) do
+      with {:ok, subexprs} <- error_or_subexprs(args) do
+        {
+          {:., [], [
+            {:__aliases__, [], [:Yams, :Query]},
+            String.to_atom(unquote(func_name))
+          ]},
+          [],
+          subexprs
+        }
+      end
+    end
+  end)
+
+  @operators [
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "==",
+    "!=",
+    "&&",
+    "||",
+    "+",
+    "-",
+    "*",
+    "/",
+  ]
+
+  Enum.each(@operators, fn op ->
+    defp to_expr([unquote(op) | args]) do
+      with {:ok, subexprs} <- error_or_subexprs(args) do
+        {
+          String.to_atom(unquote(op)),
+          [],
+          subexprs
+        }
+      end
+    end
+  end)
+
+  defp to_expr(prim) when is_integer(prim), do: prim
+  defp to_expr(prim) when is_float(prim),   do: prim
+  defp to_expr(prim) when is_binary(prim),  do: prim
+
+  defp to_expr([funcall | args]) do
+    {:error, "Unknown function call (#{funcall} #{Enum.join(args, " ")})"}
+  end
+  defp to_expr(prim) do
+    {:error, "Wanted a primitive, got #{inspect prim}"}
   end
 
-  defp el_expr([c, _]) do
-    {String.to_atom(c), [], __MODULE__}
+
+  defp inject_yam_stream({func_name, meta, args}, ys) do
+    {func_name, meta, [ys | args]}
   end
 
-
-  defp el_expr(prim), do: prim
-
-  defp prepend_arg({c, meta, args}, to_prep) do
-    {c, meta, [to_prep | Enum.map(args, &el_expr/1)]}
+  defp compile_expr(sexpr, upstream) do
+    case to_expr(sexpr) do
+      {:error, _} = e -> e
+      ast -> {:ok, inject_yam_stream(ast, upstream)}
+    end
   end
 
   def compile(pipeline) do
-    compiled = Enum.reduce(pipeline, Macro.var(:yam_stream, nil), fn
-      (node, upstream) ->
-        node
-        |> el_expr
-        |> prepend_arg(upstream)
-    end)
-
-    quoted = quote do
-      require Yams.Query
-      fn s ->
-        var!(yam_stream) = s
-        unquote(compiled)
+    result = Enum.reduce_while(
+      pipeline,
+      {:ok, Macro.var(:yam_stream, nil)},
+      fn (sexpr, {:ok, upstream}) ->
+        case compile_expr(sexpr, upstream) do
+          {:error, _} = e -> {:halt, e}
+          {:ok, _} = ok   -> {:cont, ok}
+        end
       end
+    )
+
+    with {:ok, compiled} <- result do
+      quoted = quote do
+        require Yams.Query
+        fn s ->
+          var!(yam_stream) = s
+          unquote(compiled)
+        end
+      end
+
+      {:ok, quoted}
     end
 
-    {:ok, quoted}
   end
 
   def run(stream, pipeline) do
@@ -64,8 +132,4 @@ defmodule Yams.Interpreter do
       end
     end
   end
-
-
-
-
 end

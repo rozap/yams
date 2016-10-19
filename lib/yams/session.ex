@@ -86,7 +86,7 @@ defmodule Yams.Session do
     GenServer.call(pid, :listeners)
   end
 
-  def changes(pid) do
+  def changes!(pid) do
     start_t = Yams.key
     ref = make_ref
     stream = Stream.resource(

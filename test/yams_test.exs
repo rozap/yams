@@ -36,7 +36,7 @@ defmodule YamsTest do
 
     task = Task.async(fn ->
       {_, pid} = Session.open(ref)
-      Session.changes(pid)
+      Session.changes!(pid)
       |> Query.as_stream!
       |> Stream.map(fn {_, v} -> v end)
       |> Enum.into([])
@@ -74,7 +74,7 @@ defmodule YamsTest do
 
     task = Task.async(fn ->
       {_, pid} = Session.open(ref)
-      Session.changes(pid)
+      Session.changes!(pid)
       |> Query.as_stream!
       |> Stream.map(fn {_, v} -> v end)
       |> Enum.into([])

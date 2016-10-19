@@ -3,29 +3,31 @@ defmodule Yams.Mixfile do
 
   def project do
     [app: :yams,
-     version: "0.1.0",
+     version: "0.2.0",
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
+     description: description,
+     package: [
+        licenses: ["MIT"],
+        links: %{
+          "GitHub" => "https://github.com/rozap/yams"
+        },
+        maintainers: ["rozap"]
+     ],
      deps: deps()]
   end
 
-  # Configuration for the OTP application
-  #
-  # Type "mix help compile.app" for more information
+  defp description do
+    """
+      A tiny wrapper around leveldb for timeseries data
+    """
+  end
+
   def application do
     [applications: [:logger, :eleveldb]]
   end
 
-  # Dependencies can be Hex packages:
-  #
-  #   {:mydep, "~> 0.3.0"}
-  #
-  # Or git/path repositories:
-  #
-  #   {:mydep, git: "https://github.com/elixir-lang/mydep.git", tag: "0.1.0"}
-  #
-  # Type "mix help deps" for more examples and options
   defp deps do
     [
       {:eleveldb, github: "basho/eleveldb", tag: "2.2.19"},
