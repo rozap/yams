@@ -1,5 +1,7 @@
 %{"cuttlefish": {:git, "git://github.com/basho/cuttlefish.git", "a463682ba86e9f49404dd72bb052e6e0c4b40839", [tag: "2.0.6"]},
-  "eleveldb": {:git, "https://github.com/basho/eleveldb.git", "3c8b26e99d883260d9ac922c0381ccaf41644025", [tag: "2.2.19"]},
+  "earmark": {:hex, :earmark, "1.0.2", "a0b0904d74ecc14da8bd2e6e0248e1a409a2bc91aade75fcf428125603de3853", [:mix], []},
+  "eleveldb": {:hex, :eleveldb, "2.2.19", "81339beb68da0a5cdff8662d5f4e8089b83530a7b8238d3f63b734a4d4c8040d", [:rebar3], []},
+  "ex_doc": {:hex, :ex_doc, "0.14.3", "e61cec6cf9731d7d23d254266ab06ac1decbb7651c3d1568402ec535d387b6f7", [:mix], [{:earmark, "~> 1.0", [hex: :earmark, optional: false]}]},
   "getopt": {:git, "git://github.com/jcomellas/getopt.git", "388dc95caa7fb97ec7db8cfc39246a36aba61bd8", [tag: "v0.8.2"]},
   "goldrush": {:git, "git://github.com/DeadZen/goldrush.git", "64864ba7fcf40988361340e48680b49a2c2938cf", [tag: "0.1.7"]},
   "lager": {:git, "git://github.com/basho/lager.git", "f65dde85523b6aa6a259db1c93518187ae366515", [tag: "2.2.0"]},

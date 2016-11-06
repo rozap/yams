@@ -13,6 +13,24 @@ defmodule Yams.Query do
     defstruct start_t: nil, end_t: nil, aggregations: %{}
   end
 
+  defmodule StreamError do
+    defexception message: "", func_name: "", key: 0, value: %{}
+  end
+
+  def raise_stream_error(func_name, key, value) do
+    raise %StreamError{
+      message: """
+        `#{func_name}` may only be called on streams of buckets.
+        Make sure you have transformed the stream into a bucket
+        stream by calling the `bucket` function before applying
+        `#{func_name}`.
+      """,
+      func_name: func_name,
+      key: key,
+      value: value
+    }
+  end
+
   def bucket(state, seconds, "seconds") do
     bucket(state, Yams.seconds_to_key(seconds), "nanoseconds")
   end
@@ -70,7 +88,7 @@ defmodule Yams.Query do
     prim
   end
 
-  def aggregate_buckets(state, evaluator, aggregator, label) do
+  def aggregate_buckets(func_name, state, evaluator, aggregator, label) do
     %State{stream: stream} = state
     new_stream = Stream.map(stream, fn
       %Bucket{} = b    ->
@@ -81,15 +99,15 @@ defmodule Yams.Query do
         value = aggregator.(data)
 
         Yams.Query.push_aggregate(b, label, value)
-      a ->
-        Logger.warn("Cannot make an aggregate on an aggregate stream!")
-        a
+      {key, value} ->
+        Yams.Query.raise_stream_error(func_name, key, value)
+
     end)
     struct(state, stream: new_stream)
   end
 
 
-  defp minimax(state, expr, aggregator, label) do
+  defp minimax(func_name, state, expr, aggregator, label) do
     rowified = bind_row(expr)
     quote do
       require Logger
@@ -99,6 +117,7 @@ defmodule Yams.Query do
       end
 
       Yams.Query.aggregate_buckets(
+        unquote(func_name),
         unquote(state),
         func,
         unquote(aggregator),
@@ -115,11 +134,11 @@ defmodule Yams.Query do
 
 
   defmacro minimum(state, expr, label) do
-    minimax(state, expr, &Yams.Query.safe_min/1, label)
+    minimax("minimum", state, expr, &Yams.Query.safe_min/1, label)
   end
 
   defmacro maximum(state, expr, label) do
-    minimax(state, expr, &Yams.Query.safe_max/1, label)
+    minimax("maximum", state, expr, &Yams.Query.safe_max/1, label)
   end
 
   defmacro count(state, expr, label) do
@@ -136,6 +155,7 @@ defmodule Yams.Query do
       aggregator = fn data -> length(data) end
 
       Yams.Query.aggregate_buckets(
+        "count",
         unquote(state),
         func,
         aggregator,
@@ -144,11 +164,13 @@ defmodule Yams.Query do
     end
   end
 
+
   defmacro count_where(state, expr, label) do
     rowified = bind_row(expr)
 
     quote do
       require Logger
+
 
       predicate = fn t ->
         var!(row) = t
@@ -169,9 +191,8 @@ defmodule Yams.Query do
           end)
 
           Yams.Query.push_aggregate(b, unquote(label), value)
-        a ->
-          Logger.warn("Cannot make an aggregate on an aggregate stream!")
-          a
+        {key, value} ->
+          Yams.Query.raise_stream_error("count_where", key, value)
       end)
       struct(unquote(state), stream: new_stream)
     end
@@ -193,6 +214,7 @@ defmodule Yams.Query do
       end
 
       Yams.Query.aggregate_buckets(
+        "percentile",
         unquote(state),
         func,
         aggregator,

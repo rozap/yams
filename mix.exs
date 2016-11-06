@@ -3,7 +3,7 @@ defmodule Yams.Mixfile do
 
   def project do
     [app: :yams,
-     version: "0.2.0",
+     version: "0.2.1",
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -30,9 +30,10 @@ defmodule Yams.Mixfile do
 
   defp deps do
     [
-      {:eleveldb, github: "basho/eleveldb", tag: "2.2.19"},
+      {:eleveldb, "~> 2.2.19"},
       {:statistics, "~> 0.4.1"},
       {:uuid, "~> 1.1.4"},
+      {:ex_doc, ">= 0.0.0", only: :dev}
     ]
   end
 end

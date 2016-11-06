@@ -28,9 +28,13 @@ defmodule InterpreterTest do
 
   defp eval!(stream, expr) do
     with {:ok, stream} <- Interpreter.run(stream, expr) do
-      stream
-      |> Query.as_stream!
-      |> Enum.into([])
+      try do
+        stream
+        |> Query.as_stream!
+        |> Enum.into([])
+      rescue
+        e -> {:error, e}
+      end
     end
   end
 
@@ -146,5 +150,28 @@ defmodule InterpreterTest do
 
     assert error == {:error, "Wanted a primitive, got %{}"}
   end
+
+  test "can give a reasonable runtime error for count where", %{one: one} do
+    {:error, exc} = eval!(one, [
+      ["count_where",
+        [">",
+          ["-", "row.end_t", "row.start_t"],
+          100
+        ],
+        "over_100"
+      ]
+    ])
+
+    assert exc.message =~ "`count_where` may only be called on streams of buckets"
+  end
+
+  test "can give a reasonable runtime error for max", %{one: one} do
+    {:error, exc} = eval!(one, [
+      ["maximum", "row.start_t", "over_100"]
+    ])
+
+    assert exc.message =~ "`maximum` may only be called on streams of buckets"
+  end
+
 
 end

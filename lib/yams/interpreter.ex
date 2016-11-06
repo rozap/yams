@@ -1,5 +1,6 @@
 defmodule Yams.Interpreter do
   require Logger
+  alias Yams.Query
 
   def error_or_subexprs(sexprs) do
     ast = Enum.map(sexprs, &to_expr/1)
@@ -117,19 +118,22 @@ defmodule Yams.Interpreter do
 
   end
 
-  def run(stream, pipeline) do
-    with {:ok, quoted} <- compile(pipeline) do
+  def run(stream, quoted) when is_tuple(quoted) do
+    try do
       {func, _} = Code.eval_quoted(quoted)
-      try do
-        {:ok, func.(stream)}
-      rescue
-        e in [UndefinedFunctionError] ->
-          Logger.warn("failed to interpret #{inspect pipeline} #{inspect e}")
-          message = "Undefined function #{e.function}/#{e.arity}"
-          {:error, message}
-        e ->
-          {:error, e.message}
-      end
+      {:ok, func.(stream)}
+    rescue
+      e in [UndefinedFunctionError] ->
+        message = "Undefined function #{e.function}/#{e.arity}"
+        {:error, message}
+      e ->
+        {:error, e.message}
+    end
+  end
+
+  def run(stream, pipeline) when is_list(pipeline) do
+    with {:ok, quoted} <- compile(pipeline) do
+      run(stream, quoted)
     end
   end
 end
