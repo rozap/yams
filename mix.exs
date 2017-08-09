@@ -7,7 +7,7 @@ defmodule Yams.Mixfile do
      elixir: "~> 1.3",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     description: description,
+     description: description(),
      package: [
         licenses: ["MIT"],
         links: %{
@@ -18,7 +18,7 @@ defmodule Yams.Mixfile do
      deps: deps()]
   end
 
-  defp description do
+  defp description() do
     """
       A tiny wrapper around leveldb for timeseries data
     """

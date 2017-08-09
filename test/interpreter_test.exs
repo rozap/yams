@@ -1,177 +1,91 @@
 defmodule InterpreterTest do
   use ExUnit.Case
-  alias Yams
-  require Yams.Query
-  alias Yams.{Query, Interpreter}
-
-  ## amethyst mountain stackable gemstone
-  # luxdivine etsy
+  alias Yams.{Session, Query}
 
   setup do
     Yams.start_link
 
-    {:created, h} = Yams.Session.open(UUID.uuid1())
-    from_ts = 1472175016297554068
-    Enum.each(30..60, fn num ->
-      t = num - 30
-      key = from_ts + Yams.ms_to_key(t)
-      :ok = Yams.Session.put(h, key, %{"num" => num, "str" => "foo_#{num}"})
+    {:created, h} = Session.open(UUID.uuid1())
+
+    Enum.map(0..10, fn i ->
+      Session.put(h, i, %{
+        "high" => i * 3,
+        "low" => i,
+        "close" => i * 2}
+      )
     end)
-    to_ts = from_ts + Yams.ms_to_key(20)
-    range = {from_ts, to_ts}
 
-    two = Yams.Session.stream!(h, range)
-    one = Yams.Session.stream!(h, range)
-
-    {:ok, %{one: one, two: two}}
+    {:ok, %{h: h}}
   end
 
-  defp eval!(stream, expr) do
-    with {:ok, stream} <- Interpreter.run(stream, expr) do
-      try do
-        stream
-        |> Query.as_stream!
-        |> Enum.into([])
-      rescue
-        e -> {:error, e}
-      end
-    end
+  test "can evaluate attribute", %{h: h} do
+    assert h
+    |> Session.stream!(%Query.State{tstart: 2, tend: 4, exprs: [
+      [:annotate, "high", [:attribute, "high"]]
+    ]})
+    |> Enum.into([]) == [
+      {2, [{"high", 6}]},
+      {3, [{"high", 9}]},
+      {4, [{"high", 12}]}
+    ]
   end
 
-  test "can interpret a simple expr", %{one: one, two: two} do
-    actual = eval!(one, [
-      ["bucket", 10, "milliseconds"],
-      ["maximum", "row.num", "max_num"]
-    ])
+  test "can evaluate many attributes", %{h: h} do
+    assert h
+    |> Session.stream!(%Query.State{tstart: 2, tend: 4, exprs: [
+      [:annotate, "high", [:attribute, "high"]],
+      [:annotate, "low", [:attribute, "low"]],
+      [:annotate, "close", [:attribute, "close"]]
 
-    expected = two
-    |> Query.bucket(10, "milliseconds")
-    |> Query.maximum("row.num", "max_num")
-    |> Query.as_stream!
-    |> Enum.into([])
-
-    assert actual == expected
+    ]})
+    |> Enum.into([]) == [
+      {2, [{"close", 4}, {"low", 2}, {"high", 6}]},
+      {3, [{"close", 6}, {"low", 3}, {"high", 9}]},
+      {4, [{"close", 8}, {"low", 4}, {"high", 12}]}
+    ]
   end
 
-  test "can interpret an aggregated simple expr", %{one: one, two: two} do
-    actual = eval!(one, [
-      ["bucket", 10, "milliseconds"],
-      ["maximum", "row.num", "max_num"],
-      ["percentile", "row.num", 95, "p95_num"]
-    ])
+  test "can evaluate plus", %{h: h} do
+    assert h
+    |> Session.stream!(%Query.State{tstart: 2, tend: 4, exprs: [
+      [:annotate, "low+hi", [:+,
+        [:attribute, "low"],
+        [:attribute, "high"]
+      ]],
+    ]})
+    |> Enum.into([]) == [
+      {2, [{"low+hi", 8}]},
+      {3, [{"low+hi", 12}]},
+      {4, [{"low+hi", 16}]}
+    ]
 
-    expected = two
-    |> Query.bucket(10, "milliseconds")
-    |> Query.maximum("row.num", "max_num")
-    |> Query.percentile("row.num", 95, "p95_num")
-    |> Query.as_stream!
-    |> Enum.into([])
-
-    assert actual == expected
+    assert h
+    |> Session.stream!(%Query.State{tstart: 2, tend: 4, exprs: [
+      [:annotate, "low+1", [:+,
+        [:attribute, "low"],
+        1
+      ]],
+    ]})
+    |> Enum.into([]) == [
+      {2, [{"low+1", 3}]},
+      {3, [{"low+1", 4}]},
+      {4, [{"low+1", 5}]}
+    ]
   end
 
-  test "can interpret a nested comparison expr", %{one: one, two: two} do
-
-    actual = eval!(one, [
-      ["bucket", 10, "milliseconds"],
-      ["where", [">", "row.num", 30]]
-    ])
-
-    expected = two
-    |> Query.bucket(10, "milliseconds")
-    |> Query.where("row.num" > 30)
-    |> Query.as_stream!
-    |> Enum.into([])
-
-    assert actual == expected
+  test "can evaluate minus", %{h: h} do
+    assert h
+    |> Session.stream!(%Query.State{tstart: 2, tend: 4, exprs: [
+      [:annotate, "hi-lo", [:-,
+        [:attribute, "high"],
+        [:attribute, "low"]
+      ]],
+    ]})
+    |> Enum.into([]) == [
+      {2, [{"hi-lo", 4}]},
+      {3, [{"hi-lo", 6}]},
+      {4, [{"hi-lo", 8}]}
+    ]
   end
-
-  test "can interpret a compound nested comparison expr", %{one: one, two: two} do
-    actual = eval!(one, [
-      ["bucket", 10, "milliseconds"],
-      [
-        "where",
-        [
-          "&&",
-          [">", "row.num", 30],
-          ["<", "row.num", 40]
-        ]
-      ]
-    ])
-
-    expected = two
-    |> Query.bucket(10, "milliseconds")
-    |> Query.where(("row.num" > 30) && ("row.num" < 40))
-    |> Query.as_stream!
-    |> Enum.into([])
-
-    assert actual == expected
-  end
-
-  test "can interpret a count where", %{one: one, two: two} do
-    actual = eval!(one, [
-      ["bucket", 10, "milliseconds"],
-      [
-        "count_where",
-        [
-          "&&",
-          [">=", "row.num", 30],
-          ["<=", "row.num", 40]
-        ],
-        "something"
-      ],
-      ["aggregates"]
-    ])
-
-    expected = two
-    |> Query.bucket(10, "milliseconds")
-    |> Query.count_where(("row.num" >= 30) && ("row.num" <= 40), "something")
-    |> Query.aggregates
-    |> Query.as_stream!
-    |> Enum.into([])
-
-    assert actual == expected
-  end
-
-  test "can give a reasonable error for an undefined func" do
-    error = Interpreter.compile([
-      ["bucket", 10, "milliseconds"],
-      ["foobar", 20, "baz"]
-    ])
-
-    assert error == {:error, "Unknown function call (foobar 20 baz)"}
-  end
-
-  test "can give a reasonable error for an undefined prim" do
-    error = Interpreter.compile([
-      ["bucket", 10, "milliseconds"],
-      ["where", 20, %{}]
-    ])
-
-    assert error == {:error, "Wanted a primitive, got %{}"}
-  end
-
-  test "can give a reasonable runtime error for count where", %{one: one} do
-    {:error, exc} = eval!(one, [
-      ["count_where",
-        [">",
-          ["-", "row.end_t", "row.start_t"],
-          100
-        ],
-        "over_100"
-      ]
-    ])
-
-    assert exc.message =~ "`count_where` may only be called on streams of buckets"
-  end
-
-  test "can give a reasonable runtime error for max", %{one: one} do
-    {:error, exc} = eval!(one, [
-      ["maximum", "row.start_t", "over_100"]
-    ])
-
-    assert exc.message =~ "`maximum` may only be called on streams of buckets"
-  end
-
 
 end

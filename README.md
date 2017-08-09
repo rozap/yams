@@ -15,7 +15,51 @@ end_key = Yams.key
 
 ```
 
-### Stream events out of the store with `stream!/2`
+### Run a query
+
+
+
+query = [
+  :slice, 10, 20,
+  [
+    [:annotate,
+      "10 day moving average (price)",
+      [:moving_average,
+        [:attribute, "price"],
+        [:range, 10, "day"]
+      ]
+    ],
+    [:annotate,
+      "typical price",
+      [:/
+        [:+
+          [:attribute, "high"],
+          [:attribute, "low"],
+          [:attribute, "close"]
+        ],
+        3
+      ]
+    ],
+    [:annotate,
+      "high + low moving avgs",
+      [:+
+        [:moving_average,
+          [:attribute, "high"],
+          [:range, 10, "day"]
+        ],
+        [:moving_average,
+          [:attribute, "low"],
+          [:range, 10, "day"]
+        ]
+      ]
+    ]
+  ]
+]
+
+Session.stream!(sesh, query)
+
+
+<!-- ### Stream events out of the store with `stream!/2`
 ```elixir
 Session.stream!(sesh, {start_key, end_key})
 |> Query.bucket(10, "milliseconds")
@@ -76,4 +120,4 @@ Session.changes!(sesh)
 |> Query.as_stream!
 |> Stream.each(fn event -> IO.inspect event end) # This will print each event to the console as it comes in
 |> Stream.run
-```
+``` -->

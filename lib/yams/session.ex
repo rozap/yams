@@ -14,9 +14,13 @@ defmodule Yams.Session do
     }}
   end
 
+  def key_to_string(key) do
+    key |> to_string |> String.pad_leading(19, "0")
+  end
+
   def handle_call({:put, {key, value}}, _, state) do
     serialized = :erlang.term_to_binary(value)
-    result = :eleveldb.put(state.db, "#{key}", serialized, [])
+    result = :eleveldb.put(state.db, key_to_string(key), serialized, [])
 
     Enum.each(state.subscribers, fn {who, ref} ->
       send who, {:change, {key, value}, {:from, self, ref}}
@@ -25,28 +29,35 @@ defmodule Yams.Session do
     {:reply, result, state}
   end
 
-  def handle_call({:stream, {_, end_time}}, _, state) do
+  def handle_call({:stream, %Query.State{tstart: tstart, tend: tend} = query}, _, state) do
+    starting = key_to_string(tstart)
+    ending = key_to_string(tend)
+
     stream = Stream.resource(
       fn ->
-        {:ok, ref} = :eleveldb.iterator(state.db, [])
-        {:first, ref}
+        {:ok, it} = :eleveldb.iterator(state.db, [])
+        {it, query, starting}
       end,
-      fn {state, ref} ->
-        case :eleveldb.iterator_move(ref, state) do
+      fn {it, query, move_to} ->
+        case :eleveldb.iterator_move(it, move_to) do
           {:ok, key, bin} ->
-            t = String.to_integer(key)
-            if t <= end_time do
+            if key <= ending do
               value = :erlang.binary_to_term(bin)
+              {:ok, row, query} = Query.row(
+                query,
+                String.to_integer(key),
+                value
+              )
 
-              {[{t, value}], {:next, ref}}
+              {row, {it, query, :next}}
             else
-              {:halt, {:done, ref}}
+              {:halt, {it, query, :done}}
             end
-          {:error, _} ->
-            {:halt, {:done, ref}}
+          {:error, _} = e ->
+            {:halt, {it, query, :done}}
         end
       end,
-      fn {_, ref} -> :eleveldb.iterator_close(ref) end
+      fn {it, _, _} -> :eleveldb.iterator_close(it) end
     )
 
     {:reply, {:ok, stream}, state}
@@ -66,11 +77,9 @@ defmodule Yams.Session do
     {:noreply, Map.put(state, :subscribers, subs)}
   end
 
-  def stream!(pid, range) do
-    case GenServer.call(pid, {:stream, range}) do
-      {:ok, stream} -> %Query.State{range: range, stream: stream}
-      err -> err
-    end
+  def stream!(pid, query) do
+    {:ok, s} = GenServer.call(pid, {:stream, query})
+    s
   end
 
   def put(pid, key, value) do
@@ -102,7 +111,7 @@ defmodule Yams.Session do
       fn _ -> :ok end
     )
 
-    %Query.State{range: {start_t, :none}, stream: stream}
+    # %Query.State{range: {start_t, :none}, stream: stream}
   end
 
   def subscribe_changes(pid) do

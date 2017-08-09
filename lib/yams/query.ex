@@ -1,267 +1,35 @@
 defmodule Yams.Query do
-  require Logger
+  alias Yams.Interpreter
 
   defmodule State do
-    defstruct range: {:none, :none}, stream: nil
-  end
-
-  defmodule Bucket do
-    defstruct start_t: nil, end_t: nil, data: [], aggregations: []
-  end
-
-  defmodule Aggregate do
-    defstruct start_t: nil, end_t: nil, aggregations: %{}
-  end
-
-  defmodule StreamError do
-    defexception message: "", func_name: "", key: 0, value: %{}
-  end
-
-  def raise_stream_error(func_name, key, value) do
-    raise %StreamError{
-      message: """
-        `#{func_name}` may only be called on streams of buckets.
-        Make sure you have transformed the stream into a bucket
-        stream by calling the `bucket` function before applying
-        `#{func_name}`.
-      """,
-      func_name: func_name,
-      key: key,
-      value: value
-    }
-  end
-
-  def bucket(state, seconds, "seconds") do
-    bucket(state, Yams.seconds_to_key(seconds), "nanoseconds")
-  end
-  def bucket(state, ms, "milliseconds") do
-    bucket(state, Yams.ms_to_key(ms), "nanoseconds")
-  end
-
-  def bucket(%State{stream: stream, range: {from_ts, _}} = state, nanoseconds, "nanoseconds") do
-    chunked = Stream.chunk_by(stream, fn {time, _} ->
-      Float.floor((time - from_ts) / nanoseconds)
-    end)
-    |> Stream.map(fn bucket ->
-      {{mini, _}, {maxi, _}} = Enum.min_max_by(bucket, fn {t, _} -> t end)
-      %Bucket{data: bucket, start_t: mini, end_t: maxi}
-    end)
-
-    struct(state, stream: chunked)
-  end
-
-  def push_aggregate(bucket, key, value) do
-    struct(bucket, aggregations: [{key, value} | bucket.aggregations])
-  end
-
-  def safe_percentile(data, p) do
-    case data do
-      [] -> 0
-      [n] -> n
-      others -> Statistics.percentile(others, p)
-    end
-  end
-
-  defp bind_row([{e, m, args} | rest]) do
-    [{e, m, bind_row(args)} | bind_row(rest)]
-  end
-
-  defp bind_row({comparator, meta, args}) do
-    {comparator, meta, bind_row(args)}
-  end
-
-  defp bind_row("row." <> str) do
-    {
-      {:., [], [
-        {:__aliases__, [alias: false], [:Map]},
-        :get
-      ]}, [],
-      [Macro.var(:row, nil), str]
-    }
-  end
-
-  defp bind_row([prim | rest]) do
-    [bind_row(prim) | bind_row(rest)]
-  end
-
-  defp bind_row(prim) do
-    prim
-  end
-
-  def aggregate_buckets(func_name, state, evaluator, aggregator, label) do
-    %State{stream: stream} = state
-    new_stream = Stream.map(stream, fn
-      %Bucket{} = b    ->
-        data = Enum.map(b.data, fn {_, datum} ->
-          evaluator.(datum)
-        end)
-
-        value = aggregator.(data)
-
-        Yams.Query.push_aggregate(b, label, value)
-      {key, value} ->
-        Yams.Query.raise_stream_error(func_name, key, value)
-
-    end)
-    struct(state, stream: new_stream)
+    @enforce_keys [:tstart, :tend]
+    defstruct [
+      :tstart,
+      :tend,
+      exprs: [],
+      accumulation: %{}
+    ]
   end
 
 
-  defp minimax(func_name, state, expr, aggregator, label) do
-    rowified = bind_row(expr)
-    quote do
-      require Logger
-      func = fn t ->
-        var!(row) = t
-        unquote(rowified)
-      end
+  defp reduce_expr([:annotate, label, expr], row, {attrs, acc}) do
+    {value, expr_acc} = Interpreter.eval(
+      expr,
+      row,
+      Interpreter.init_accumulator(expr)
+    )
 
-      Yams.Query.aggregate_buckets(
-        unquote(func_name),
-        unquote(state),
-        func,
-        unquote(aggregator),
-        unquote(label)
-      )
-    end
-  end
-
-  def safe_min([]), do: 0
-  def safe_min(data), do: Enum.min(data)
-
-  def safe_max([]), do: 0
-  def safe_max(data), do: Enum.max(data)
-
-
-  defmacro minimum(state, expr, label) do
-    minimax("minimum", state, expr, &Yams.Query.safe_min/1, label)
-  end
-
-  defmacro maximum(state, expr, label) do
-    minimax("maximum", state, expr, &Yams.Query.safe_max/1, label)
-  end
-
-  defmacro count(state, expr, label) do
-    rowified = bind_row(expr)
-
-    quote do
-      require Logger
-
-      func = fn t ->
-        var!(row) = t
-        unquote(rowified)
-      end
-
-      aggregator = fn data -> length(data) end
-
-      Yams.Query.aggregate_buckets(
-        "count",
-        unquote(state),
-        func,
-        aggregator,
-        unquote(label)
-      )
-    end
+    {[{label, value} | attrs], Map.put(acc, label, expr_acc)}
   end
 
 
-  defmacro count_where(state, expr, label) do
-    rowified = bind_row(expr)
+  def row(%State{exprs: exprs} = state, key, row) do
+    {row, accumulation} = Enum.reduce(
+      exprs,
+      {[], state.accumulation},
+      fn expr, acc -> reduce_expr(expr, row, acc) end
+    )
 
-    quote do
-      require Logger
-
-
-      predicate = fn t ->
-        var!(row) = t
-        unquote(rowified)
-      end
-
-      aggregator = fn data -> length(data) end
-
-      %State{stream: stream} = unquote(state)
-      new_stream = Stream.map(stream, fn
-        %Bucket{} = b ->
-          value = Enum.reduce(b.data, 0, fn {_t, x}, acc ->
-            if(predicate.(x)) do
-              acc + 1
-            else
-              acc
-            end
-          end)
-
-          Yams.Query.push_aggregate(b, unquote(label), value)
-        {key, value} ->
-          Yams.Query.raise_stream_error("count_where", key, value)
-      end)
-      struct(unquote(state), stream: new_stream)
-    end
+    {:ok, [{key, row}], %{state | accumulation: accumulation}}
   end
-
-  defmacro percentile(state, expr, perc, label) do
-    rowified = bind_row(expr)
-
-    quote do
-      require Logger
-
-      func = fn t ->
-        var!(row) = t
-        unquote(rowified)
-      end
-
-      aggregator = fn data ->
-        Yams.Query.safe_percentile(data, unquote(perc))
-      end
-
-      Yams.Query.aggregate_buckets(
-        "percentile",
-        unquote(state),
-        func,
-        aggregator,
-        unquote(label)
-      )
-    end
-  end
-
-  defmacro where(state, expr) do
-    rowified = bind_row(expr)
-
-    quote do
-      predicate = fn t ->
-        var!(row) = t
-        unquote(rowified)
-      end
-
-      %State{stream: stream} = s = unquote(state)
-      new_stream = Stream.flat_map(stream, fn
-        %Bucket{} = b    ->
-          data = Enum.filter(b.data, fn {_, datum} ->
-            predicate.(datum)
-          end)
-          [struct(b, data: data)]
-        %Aggregate{} = a ->
-          if predicate.(a.aggregations) do
-            [a]
-          else
-            []
-          end
-      end)
-      struct(s, stream: new_stream)
-    end
-  end
-
-
-  def aggregates(%State{stream: stream} = state) do
-    new_stream = Stream.map(stream, fn %Bucket{aggregations: aggs} = b ->
-      %Aggregate{
-        start_t: b.start_t,
-        end_t: b.end_t,
-        aggregations: Enum.into(aggs, %{})
-      }
-    end)
-
-    struct(state, stream: new_stream)
-  end
-
-  def as_stream!(%State{stream: stream}), do: stream
 end
